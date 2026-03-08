@@ -421,11 +421,11 @@ main {
 </head>
 <body>
 
-<div id="dev-version" style="position:fixed; top:0; left:0; right:0; background:#ff2244; color:white; text-align:center; font-family:monospace; font-size:1.1rem; font-weight:bold; padding:6px; z-index:99999; letter-spacing:2px;">🚧 GeoKart DEV v2.2 — BANBYGGARE 🚧</div>
+<div id="dev-version" style="position:fixed; top:0; left:0; right:0; background:#ff2244; color:white; text-align:center; font-family:monospace; font-size:1.1rem; font-weight:bold; padding:6px; z-index:99999; letter-spacing:2px;">🚧 GeoKart DEV v2.3 — BANBYGGARE 🚧</div>
 
 <header>
   <div class="logo">🏗️ GeoKart Builder</div>
-  <div class="phase-badge" id="phase-label">Redo v2.2</div>
+  <div class="phase-badge" id="phase-label">Redo</div>
 </header>
 
 <main>
@@ -445,6 +445,7 @@ main {
     <div class="empty-state" id="empty-state">
       <div class="empty-icon">🎙️</div>
       <div>Starta GPS och säg vad du vill ha längs banan</div>
+      <div style="font-size:0.75rem; opacity:0.7">"Lägg en lavagrop här" · "Sätt en portal" · "Spikmattor!"</div>
     </div>
   </div>
 </main>
@@ -454,42 +455,58 @@ main {
     <div class="ai-dot" id="ai-dot"></div>
     <span id="ai-status-text">AI redo — tryck mikrofonen och tala</span>
   </div>
-
   <div id="transcript-box">Ingenting ännu...</div>
-
   <button id="mic-btn">
     <div class="mic-ring"></div>
     <span id="mic-icon">🎤</span>
     <span id="mic-label">Tryck & tala</span>
   </button>
-
   <div class="ctrl-row">
-    <button class="ctrl-btn primary" id="gps-btn">Starta GPS</button>
-    <button class="ctrl-btn danger" id="clear-btn">Rensa</button>
-    <button class="ctrl-btn export" id="export-btn">Spara</button>
+    <button class="ctrl-btn primary" id="gps-btn">
+      <span id="gps-btn-icon">📍</span>
+      <span id="gps-btn-label">Starta GPS</span>
+    </button>
+    <button class="ctrl-btn danger" id="clear-btn">🗑️ Rensa</button>
+    <button class="ctrl-btn export" id="export-btn">💾 Spara</button>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-const GEMINI_API_KEY = "AIzaSyC6O_Q3306SJB9_1uy2a5UsRukrDjxa8AU";
 
-async function callGemini(systemPrompt, userText) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-  const res = await fetch(url, {
+async function callGemini(systemPrompt, userText, imageBase64 = null) {
+  const parts = [];
+  if (imageBase64) {
+    parts.push({ inline_data: { mime_type: "image/jpeg", data: imageBase64 } });
+  }
+  parts.push({ text: userText });
+
+  const res = await fetch('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: 'user', parts: [{ text: userText }] }]
+      model: 'gemini-2.5-flash',
+      payload: {
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts }],
+      }
     })
   });
   const data = await res.json();
+  if (data.error) console.error("API Fel:", data.error);
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-}
 
-const state = { gpsActive: false, gpsPoints: [], obstacles: [], currentLat: null, currentLon: null };
+
+const state = {
+  gpsActive: false,
+  gpsPoints: [],
+  obstacles: [],
+  watchId: null,
+  currentLat: null,
+  currentLon: null,
+};
+
 const canvas = document.getElementById('trackCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -512,7 +529,7 @@ function drawMap() {
   for (let y = 0; y < H; y += 30) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
   if (state.gpsPoints.length < 2) return;
   const pts = toCanvasCoords(state.gpsPoints, W, H);
-  ctx.strokeStyle = '#00cfff'; ctx.lineWidth = 8;
+  ctx.strokeStyle = '#1a2a4a'; ctx.lineWidth = 8;
   ctx.beginPath();
   pts.forEach((p,i) => i === 0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
   ctx.stroke();
@@ -524,8 +541,8 @@ function toCanvasCoords(gpsPoints, W, H) {
   const minLon = Math.min(...lons), maxLon = Math.max(...lons);
   const pad = 30;
   return gpsPoints.map(p => ({
-    x: pad + (maxLat === minLat ? W/2 : (p.lon - minLon) / (maxLon - minLon || 1) * (W - pad*2)),
-    y: pad + (maxLon === minLon ? H/2 : (1 - (p.lat - minLat) / (maxLat - minLat || 1)) * (H - pad*2))
+    x: pad + (maxLon - minLon === 0 ? W/2 : (p.lon - minLon) / (maxLon - minLon) * (W - pad*2)),
+    y: pad + (maxLat - minLat === 0 ? H/2 : (1 - (p.lat - minLat) / (maxLat - minLat)) * (H - pad*2))
   }));
 }
 
@@ -564,17 +581,22 @@ function toggleMic() {
 }
 
 async function processVoiceCommand(text) {
-  document.getElementById('ai-dot').className = 'ai-dot thinking';
+  setAIStatus('thinking', 'AI tolkar...');
   try {
     const raw = await callGemini("Du är en AI som placerar hinder på en bana. Svara JSON: {'type':'lava','name':'Lavagrop','icon':'🌋'}", text);
     const obs = JSON.parse(raw.replace(/```json|```/g, ''));
     placeObstacle(obs, text);
-  } catch(e) { console.error(e); }
-  document.getElementById('ai-dot').className = 'ai-dot ready';
+    setAIStatus('ready', `✅ Placerade "${obs.name}"!`);
+  } catch(e) { 
+    console.error(e);
+    setAIStatus('ready', 'Förstod inte, försök igen!');
+  }
 }
 
 function placeObstacle(obs, voiceText) {
-  state.obstacles.push({...obs, lat: state.currentLat, lon: state.currentLon});
+  state.obstacles.push({...obs, lat: state.currentLat, lon: state.currentLon, voiceText});
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.remove();
   const log = document.getElementById('obstacle-log');
   const div = document.createElement('div');
   div.className = 'obstacle-item';
@@ -582,13 +604,23 @@ function placeObstacle(obs, voiceText) {
   log.appendChild(div);
 }
 
+function setAIStatus(state, text) {
+  document.getElementById('ai-dot').className = 'ai-dot ' + state;
+  document.getElementById('ai-status-text').textContent = text;
+}
+
 document.getElementById('gps-btn').onclick = () => state.gpsActive ? stopGPS() : startGPS();
 document.getElementById('mic-btn').onclick = toggleMic;
 document.getElementById('clear-btn').onclick = () => location.reload();
 document.getElementById('export-btn').onclick = () => {
-    const blob = new Blob([JSON.stringify(state)], {type: 'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bana.json'; a.click();
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `geokart-bana-${Date.now()}.json`;
+    a.click();
 };
+
+resizeCanvas();
 </script>
 </body>
 </html>
