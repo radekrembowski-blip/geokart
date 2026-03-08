@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoKart 🏎️</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a1a;
+    font-family: 'Nunito', sans-serif;
+    overflow: hidden;
+    color: white;
+  }
+
+  #loading {
+    position: fixed; inset: 0;
+    background: linear-gradient(135deg, #1a0533 0%, #0d1f4a 50%, #001a0d 100%);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    transition: opacity 0.8s ease;
+  }
+
+  #loading h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(3rem, 8vw, 6rem);
+    background: linear-gradient(90deg, #ff6b35, #ffd700, #00ff88, #00cfff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+
+  .load-bar-wrap {
+    width: 300px; height: 12px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 6px; margin-top: 2rem;
+    overflow: hidden;
+  }
+  .load-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #ff6b35, #ffd700);
+    border-radius: 6px;
+    animation: load 2.5s ease-out forwards;
+  }
+  @keyframes load { from{width:0%} to{width:100%} }
+
+  #load-text {
+    margin-top: 1rem;
+    font-size: 1rem;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  canvas { display: block; }
+
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #top-hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1rem 1.5rem;
+  }
+
+  .hud-box {
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 0.5rem 1rem;
+  }
+
+  #speed-display {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2rem;
+    color: #ffd700;
+  }
+  #speed-label { font-size: 0.65rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 2px; text-align: center; }
+
+  #lap-display {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.8rem;
+    color: #00ff88;
+    text-align: right;
+  }
+
+  #minimap {
+    position: fixed;
+    bottom: 1.5rem; right: 1.5rem;
+    width: 160px; height: 160px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    z-index: 10;
+    overflow: hidden;
+  }
+
+  #minimap canvas { width: 100%; height: 100%; }
+
+  #controls-hint {
+    position: fixed;
+    bottom: 1.5rem; left: 1.5rem;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    z-index: 10;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.8;
+  }
+
+  .key {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    font-family: monospace;
+  }
+
+  #track-select {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(5,5,20,0.95);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 2rem;
+    z-index: 20;
+    text-align: center;
+    min-width: 380px;
+    backdrop-filter: blur(20px);
+  }
+
+  #track-select h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2rem;
+    background: linear-gradient(90deg, #ff6b35, #ffd700);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+
+  #track-select p {
+    color: rgba(255,255,255,0.5);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .track-btn {
+    display: block;
+    width: 100%;
+    padding: 1rem 1.5rem;
+    margin: 0.5rem 0;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    color: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .track-btn:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,215,0,0.4);
+    transform: translateX(4px);
+  }
+
+  .track-btn .track-icon { font-size: 1.8rem; }
+  .track-btn .track-info { flex: 1; }
+  .track-btn .track-name { font-size: 1rem; color: #ffd700; }
+  .track-btn .track-desc { font-size: 0.75rem; color: rgba(255,255,255,0.4); }
+
+  #countdown {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Fredoka One', cursive;
+    font-size: 10rem;
+    color: #ffd700;
+    text-shadow: 0 0 60px #ffd700, 0 0 120px #ff6b35;
+    z-index: 30;
+    display: none;
+    animation: countPop 0.4s ease-out;
+    pointer-events: none;
+  }
+
+  @keyframes countPop {
+    from { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+    to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  }
+
+  #item-display {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    gap: 0.5rem;
+    pointer-events: none;
+  }
+
+  .item-box {
+    width: 64px; height: 64px;
+    background: rgba(0,0,0,0.6);
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    backdrop-filter: blur(8px);
+  }
+
+  #place-display {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.2rem;
+    color: white;
+    text-align: center;
+  }
+
+  .place-num {
+    font-size: 2.5rem;
+    color: #ffd700;
+    display: block;
+  }
+
+  #finish-screen {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 50;
+    display: none;
+    backdrop-filter: blur(10px);
+  }
+
+  #finish-screen h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 5rem;
+    background: linear-gradient(90deg, #ffd700, #ff6b35);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: pulse 1s infinite;
+  }
+
+  .finish-time {
+    font-size: 2rem;
+    color: #00ff88;
+    margin: 1rem 0;
+  }
+
+  .restart-btn {
+    margin-top: 2rem;
+    padding: 1rem 3rem;
+    background: linear-gradient(135deg, #ff6b35, #ffd700);
+    border: none;
+    border-radius: 50px;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.5rem;
+    color: #0a0a1a;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .restart-btn:hover { transform: scale(1.05); }
+
+  #effect-flash {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 40;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+</style>
+</head>
+<body>
+
+<style id="version-style">
+#dev-version {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  background: #ff2244;
+  color: white;
+  text-align: center;
+  font-family: monospace;
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 6px;
+  z-index: 99999;
+  letter-spacing: 2px;
+}
+</style>
+<div id="dev-version">🚧 GeoKart DEV v2.1 — SPELET 🚧</div>
+
+
+<div id="loading">
+  <h1>🏎️ GeoKart</h1>
+  <div style="margin-top:1rem; font-size:1.1rem; color:rgba(255,255,255,0.5)">Ditt kvarter. Din bana. Din seger.</div>
+  <div class="load-bar-wrap"><div class="load-bar"></div></div>
+  <div id="load-text">Laddar värld...</div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="hud" style="display:none">
+  <div id="top-hud">
+    <div class="hud-box">
+      <div id="speed-display">0</div>
+      <div id="speed-label">km/h</div>
+    </div>
+    <div class="hud-box" style="text-align:center">
+      <div id="place-display">
+        <span class="place-num" id="place-num">1</span>
+        <span>/8</span>
+      </div>
+    </div>
+    <div class="hud-box">
+      <div id="lap-display">Varv <span id="lap-num">1</span>/3</div>
+      <div id="lap-time" style="font-size:0.8rem; color:rgba(255,255,255,0.5); text-align:right">0:00.00</div>
+    </div>
+  </div>
+</div>
+
+<div id="minimap" style="display:none">
+  <canvas id="minimapCanvas" width="160" height="160"></canvas>
+</div>
+
+<div id="controls-hint" style="display:none">
+  <div><span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> · Kör</div>
+  <div><span class="key">Space</span> · Broms/Drift</div>
+  <div><span class="key">E</span> · Använd item</div>
+</div>
+
+<div id="item-display" style="display:none">
+  <div class="item-box" id="item-box">❓</div>
+</div>
+
+<div id="countdown"></div>
+<div id="effect-flash"></div>
+
+<div id="track-select">
+  <h2>🌍 Välj bana</h2>
+  <p>Välj en av dessa procedurellt genererade banor</p>
+
+  <button class="track-btn" onclick="selectTrack('city')">
+    <span class="track-icon">🏙️</span>
+    <div class="track-info">
+      <div class="track-name">Stadsracet</div>
+      <div class="track-desc">Slingrande stadsgator · Medel svårighet</div>
+    </div>
+  </button>
+
+  <button class="track-btn" onclick="selectTrack('volcano')">
+    <span class="track-icon">🌋</span>
+    <div class="track-info">
+      <div class="track-name">Vulkankursen</div>
+      <div class="track-desc">Lavagravar &amp; farliga hopp · Svår</div>
+    </div>
+  </button>
+
+  <button class="track-btn" onclick="selectTrack('forest')">
+    <span class="track-icon">🌲</span>
+    <div class="track-info">
+      <div class="track-name">Skogsstigen</div>
+      <div class="track-desc">Mjuka kurvor i naturen · Lätt</div>
+    </div>
+  </button>
+
+  <button class="track-btn" onclick="selectTrack('gps')" style="border-color:rgba(0,255,136,0.3)">
+    <span class="track-icon">📍</span>
+    <div class="track-info">
+      <div class="track-name">Min GPS-bana</div>
+      <div class="track-desc">Genereras från din position · Kräver GPS</div>
+    </div>
+  </button>
+</div>
+
+<div id="finish-screen">
+  <h1>🏆 KLAR!</h1>
+  <div class="finish-time" id="finish-time">2:34.56</div>
+  <div style="color:rgba(255,255,255,0.5); font-size:1rem">Varv-tider</div>
+  <div id="lap-times-list" style="margin:0.5rem 0; color:#00ff88; font-size:1.1rem"></div>
+  <button class="restart-btn" onclick="restartGame()">🔄 Kör igen</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ─────────────────────────────────────────────
+// GEOKART — Core Engine
+// ─────────────────────────────────────────────
+
+const canvas = document.getElementById('gameCanvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 2000);
+
+let W = window.innerWidth, H = window.innerHeight;
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  renderer.setSize(W, H);
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── Track Definitions ───────────────────────
+const TRACKS = {
+  city: {
+    name: 'Stadsracet',
+    bgColor: 0x1a1a2e,
+    fogColor: 0x1a1a2e,
+    fogDensity: 0.003,
+    groundColor: 0x2a2a3e,
+    trackColor: 0x444466,
+    borderColor: 0xff6b35,
+    skyColor: 0x0d0d2b,
+    obstacles: 'city',
+    points: generateCityTrack(),
+  },
+  volcano: {
+    name: 'Vulkankursen',
+    bgColor: 0x1a0500,
+    fogColor: 0x2a0800,
+    fogDensity: 0.004,
+    groundColor: 0x1a0800,
+    trackColor: 0x3a1500,
+    borderColor: 0xff3300,
+    skyColor: 0x100400,
+    obstacles: 'volcano',
+    points: generateVolcanoTrack(),
+  },
+  forest: {
+    name: 'Skogsstigen',
+    bgColor: 0x0a1a0a,
+    fogColor: 0x0a1a0a,
+    fogDensity: 0.004,
+    groundColor: 0x0d2010,
+    trackColor: 0x2a4a1a,
+    borderColor: 0x00ff88,
+    skyColor: 0x041008,
+    obstacles: 'forest',
+    points: generateForestTrack(),
+  },
+  gps: {
+    name: 'GPS-bana',
+    bgColor: 0x0a0a1a,
+    fogColor: 0x0a0a1a,
+    fogDensity: 0.003,
+    groundColor: 0x151520,
+    trackColor: 0x252540,
+    borderColor: 0x00cfff,
+    skyColor: 0x050510,
+    obstacles: 'city',
+    points: null, // generated from GPS
+  }
+};
+
+function generateCityTrack() {
+  return [
+    {x:0,z:0},{x:80,z:-20},{x:160,z:-10},{x:220,z:40},
+    {x:240,z:120},{x:200,z:180},{x:120,z:210},{x:40,z:200},
+    {x:-40,z:160},{x:-80,z:80},{x:-60,z:20},{x:0,z:0}
+  ];
+}
+
+function generateVolcanoTrack() {
+  return [
+    {x:0,z:0},{x:100,z:-30},{x:200,z:0},{x:250,z:80},
+    {x:230,z:160},{x:160,z:220},{x:80,z:230},{x:0,z:200},
+    {x:-60,z:140},{x:-70,z:60},{x:-30,z:10},{x:0,z:0}
+  ];
+}
+
+function generateForestTrack() {
+  return [
+    {x:0,z:0},{x:60,z:-40},{x:130,z:-60},{x:190,z:-20},
+    {x:210,z:60},{x:190,z:130},{x:140,z:170},{x:70,z:180},
+    {x:10,z:160},{x:-30,z:100},{x:-20,z:40},{x:0,z:0}
+  ];
+}
+
+function splinePoints(pts, divisions = 200) {
+  const curve = new THREE.CatmullRomCurve3(
+    pts.map(p => new THREE.Vector3(p.x, 0, p.z)),
+    true
+  );
+  return curve.getPoints(divisions);
+}
+
+// ─── Track Builder ────────────────────────────
+let trackData = null;
+let trackObjects = [];
+let obstacles = [];
+let itemBoxes = [];
+let lapCheckpoints = [];
+
+function clearScene() {
+  trackObjects.forEach(o => scene.remove(o));
+  trackObjects = [];
+  obstacles = [];
+  itemBoxes = [];
+  lapCheckpoints = [];
+}
+
+function buildTrack(trackDef) {
+  clearScene();
+  const pts = splinePoints(trackDef.points);
+  trackData = { points: pts, def: trackDef };
+
+  // Background
+  scene.background = new THREE.Color(trackDef.skyColor);
+  scene.fog = new THREE.FogExp2(trackDef.fogColor, trackDef.fogDensity);
+
+  // Ground plane
+  const groundGeo = new THREE.PlaneGeometry(2000, 2000);
+  const groundMat = new THREE.MeshLambertMaterial({ color: trackDef.groundColor });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  trackObjects.push(ground);
+
+  // Track surface
+  buildTrackSurface(pts, trackDef);
+
+  // Lighting
+  buildLighting(trackDef);
+
+  // Obstacles
+  buildObstacles(pts, trackDef);
+
+  // Item boxes
+  buildItemBoxes(pts);
+
+  // Lap checkpoints
+  lapCheckpoints = [
+    Math.floor(pts.length * 0.0),
+    Math.floor(pts.length * 0.25),
+    Math.floor(pts.length * 0.5),
+    Math.floor(pts.length * 0.75),
+  ];
+
+  return pts[0];
+}
+
+function buildTrackSurface(pts, trackDef) {
+  const TRACK_WIDTH = 18;
+  const shape = new THREE.Shape();
+
+  for (let i = 0; i < pts.length; i++) {
+    const curr = pts[i];
+    const next = pts[(i + 1) % pts.length];
+    const dir = new THREE.Vector3().subVectors(next, curr).normalize();
+    const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+
+    const l = curr.clone().add(perp.clone().multiplyScalar(TRACK_WIDTH));
+    const r = curr.clone().add(perp.clone().multiplyScalar(-TRACK_WIDTH));
+
+    if (i === 0) shape.moveTo(l.x, l.z);
+    else shape.lineTo(l.x, l.z);
+  }
+
+  // Use TubeGeometry for cleaner track
+  const curve = new THREE.CatmullRomCurve3(pts, true);
+  const tubeGeo = new THREE.TubeGeometry(curve, pts.length, TRACK_WIDTH / 2, 4, true);
+
+  // Flatten tube to make road
+  const pos = tubeGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    pos.setY(i, Math.max(y * 0.05, 0.05));
+  }
+  pos.needsUpdate = true;
+
+  const trackMat = new THREE.MeshLambertMaterial({
+    color: trackDef.trackColor,
+    side: THREE.DoubleSide
+  });
+  const trackMesh = new THREE.Mesh(tubeGeo, trackMat);
+  trackMesh.receiveShadow = true;
+  scene.add(trackMesh);
+  trackObjects.push(trackMesh);
+
+  // Border / guardrails
+  buildGuardrails(pts, trackDef, TRACK_WIDTH);
+}
+
+function buildGuardrails(pts, trackDef, trackWidth) {
+  const mat = new THREE.MeshLambertMaterial({ color: trackDef.borderColor, emissive: new THREE.Color(trackDef.borderColor).multiplyScalar(0.3) });
+
+  for (let i = 0; i < pts.length; i += 4) {
+    const curr = pts[i];
+    const next = pts[(i + 1) % pts.length];
+    const dir = new THREE.Vector3().subVectors(next, curr).normalize();
+    const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+
+    [-1, 1].forEach(side => {
+      const pos = curr.clone().add(perp.clone().multiplyScalar(side * (trackWidth / 2 + 1)));
+      const geo = new THREE.BoxGeometry(1.5, 2, 1.5);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(pos.x, 1, pos.z);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      trackObjects.push(mesh);
+    });
+  }
+}
+
+function buildLighting(trackDef) {
+  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambient);
+  trackObjects.push(ambient);
+
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  sun.position.set(200, 400, 200);
+  sun.castShadow = true;
+  sun.shadow.mapSize.width = 2048;
+  sun.shadow.mapSize.height = 2048;
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 1500;
+  sun.shadow.camera.left = -400;
+  sun.shadow.camera.right = 400;
+  sun.shadow.camera.top = 400;
+  sun.shadow.camera.bottom = -400;
+  scene.add(sun);
+  trackObjects.push(sun);
+
+  if (trackDef.obstacles === 'volcano') {
+    const lavaGlow = new THREE.PointLight(0xff4400, 3, 200);
+    lavaGlow.position.set(120, 10, 100);
+    scene.add(lavaGlow);
+    trackObjects.push(lavaGlow);
+  }
+}
+
+function buildObstacles(pts, trackDef) {
+  const count = 20;
+  const step = Math.floor(pts.length / count);
+
+  for (let i = 5; i < pts.length - 5; i += step) {
+    const pt = pts[i];
+    const next = pts[(i + 1) % pts.length];
+    const dir = new THREE.Vector3().subVectors(next, pt).normalize();
+    const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+    const offset = (Math.random() - 0.5) * 12;
+    const pos = pt.clone().add(perp.multiplyScalar(offset));
+
+    let obstacleMesh = null;
+
+    if (trackDef.obstacles === 'volcano') {
+      // Lava rocks
+      const geo = new THREE.DodecahedronGeometry(2 + Math.random() * 2);
+      const mat = new THREE.MeshLambertMaterial({
+        color: 0x1a0500,
+        emissive: 0x440000
+      });
+      obstacleMesh = new THREE.Mesh(geo, mat);
+      obstacleMesh.position.set(pos.x, 1.5, pos.z);
+
+      // Occasional lava pool
+      if (Math.random() > 0.6) {
+        const lavaGeo = new THREE.CylinderGeometry(4, 4, 0.3, 16);
+        const lavaMat = new THREE.MeshLambertMaterial({ color: 0xff3300, emissive: 0xff1100 });
+        const lava = new THREE.Mesh(lavaGeo, lavaMat);
+        lava.position.set(pos.x, 0.2, pos.z);
+        lava.userData.isLava = true;
+        scene.add(lava);
+        trackObjects.push(lava);
+        obstacles.push({ mesh: lava, isLava: true, radius: 4 });
+      }
+
+    } else if (trackDef.obstacles === 'forest') {
+      // Trees
+      const trunkGeo = new THREE.CylinderGeometry(0.5, 0.7, 4, 8);
+      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x3d2010 });
+      obstacleMesh = new THREE.Mesh(trunkGeo, trunkMat);
+      obstacleMesh.position.set(pos.x, 2, pos.z);
+
+      const leafGeo = new THREE.ConeGeometry(3, 5, 8);
+      const leafMat = new THREE.MeshLambertMaterial({ color: 0x1a4a1a });
+      const leaves = new THREE.Mesh(leafGeo, leafMat);
+      leaves.position.y = 4;
+      obstacleMesh.add(leaves);
+
+    } else {
+      // City: buildings / barrels
+      if (Math.random() > 0.5) {
+        const geo = new THREE.CylinderGeometry(1.2, 1.2, 2.5, 8);
+        const mat = new THREE.MeshLambertMaterial({ color: 0xff6b35 });
+        obstacleMesh = new THREE.Mesh(geo, mat);
+        obstacleMesh.position.set(pos.x, 1.25, pos.z);
+      } else {
+        const geo = new THREE.BoxGeometry(3, 3, 3);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x334 });
+        obstacleMesh = new THREE.Mesh(geo, mat);
+        obstacleMesh.position.set(pos.x, 1.5, pos.z);
+      }
+    }
+
+    if (obstacleMesh) {
+      obstacleMesh.castShadow = true;
+      obstacleMesh.userData.obstacle = true;
+      obstacleMesh.userData.radius = 2.5;
+      scene.add(obstacleMesh);
+      trackObjects.push(obstacleMesh);
+      obstacles.push({ mesh: obstacleMesh, radius: obstacleMesh.userData.radius });
+    }
+  }
+}
+
+function buildItemBoxes(pts) {
+  const ITEMS = ['⭐', '💣', '🍌', '🚀', '🛡️', '⚡'];
+  const count = 8;
+  const step = Math.floor(pts.length / count);
+
+  for (let i = 0; i < count; i++) {
+    const pt = pts[i * step + Math.floor(step / 2)];
+    const geo = new THREE.BoxGeometry(3, 3, 3);
+    const mat = new THREE.MeshLambertMaterial({
+      color: 0xffd700,
+      emissive: 0x443300,
+      transparent: true,
+      opacity: 0.85
+    });
+    const box = new THREE.Mesh(geo, mat);
+    box.position.set(pt.x, 2, pt.z);
+    box.userData.isItem = true;
+    box.userData.item = ITEMS[Math.floor(Math.random() * ITEMS.length)];
+    box.userData.active = true;
+    scene.add(box);
+    trackObjects.push(box);
+    itemBoxes.push(box);
+  }
+}
+
+// ─── Kart ─────────────────────────────────────
+let kart = null;
+let kartVelocity = new THREE.Vector3();
+let kartSpeed = 0;
+let kartAngle = 0;
+let kartOnTrack = true;
+let kartItem = null;
+let kartLap = 1;
+let lastCheckpoint = 0;
+let kartSpinTimer = 0;
+let kartBoostTimer = 0;
+let kartShieldTimer = 0;
+
+function buildKart() {
+  if (kart) scene.remove(kart);
+
+  const group = new THREE.Group();
+
+  // Body
+  const bodyGeo = new THREE.BoxGeometry(3, 1.5, 4.5);
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x00cfff });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.5;
+  body.castShadow = true;
+  group.add(body);
+
+  // Cabin
+  const cabinGeo = new THREE.BoxGeometry(2, 1.2, 2);
+  const cabinMat = new THREE.MeshLambertMaterial({ color: 0x0099cc });
+  const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+  cabin.position.set(0, 1.6, -0.3);
+  cabin.castShadow = true;
+  group.add(cabin);
+
+  // Wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 12);
+  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  [[-1.7, 0, -1.5], [1.7, 0, -1.5], [-1.7, 0, 1.5], [1.7, 0, 1.5]].forEach(([x, y, z]) => {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.position.set(x, y, z);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.castShadow = true;
+    group.add(wheel);
+  });
+
+  kart = group;
+  kart.userData.wheels = group.children.slice(2);
+  scene.add(kart);
+  return group;
+}
+
+// ─── AI Karts ─────────────────────────────────
+let aiKarts = [];
+
+function buildAIKarts(count = 3) {
+  const colors = [0xff6b35, 0x00ff88, 0xff00ff, 0xffd700];
+  aiKarts.forEach(a => scene.remove(a.mesh));
+  aiKarts = [];
+
+  for (let i = 0; i < count; i++) {
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color: colors[i % colors.length] });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.5, 4.5), bodyMat);
+    body.position.y = 0.5;
+    group.add(body);
+
+    const wMat = new THREE.MeshLambertMaterial({ color: 0x111 });
+    [[-1.7,0,-1.5],[1.7,0,-1.5],[-1.7,0,1.5],[1.7,0,1.5]].forEach(([x,y,z]) => {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.7,0.5,12), wMat);
+      w.position.set(x,y,z); w.rotation.z = Math.PI/2;
+      group.add(w);
+    });
+
+    const startPt = trackData.points[Math.floor(trackData.points.length * (i + 1) / (count + 2))];
+    group.position.set(startPt.x, 0.7, startPt.z);
+    scene.add(group);
+
+    aiKarts.push({
+      mesh: group,
+      pathIndex: Math.floor(trackData.points.length * (i + 1) / (count + 2)),
+      speed: 0.4 + Math.random() * 0.15,
+      wobble: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+// ─── Input ────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyE' && kartItem && gameRunning) useItem();
+  if (e.code === 'Space') e.preventDefault();
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// Mobile touch
+let touchLeft = false, touchRight = false, touchAccel = false, touchBrake = false;
+
+function addTouchControls() {
+  const div = document.createElement('div');
+  div.style.cssText = `
+    position:fixed; bottom:0; left:0; right:0; height:200px;
+    display:flex; z-index:15; pointer-events:auto;
+  `;
+
+  const makeBtn = (label, ondown, onup, style='') => {
+    const b = document.createElement('button');
+    b.innerHTML = label;
+    b.style.cssText = `
+      flex:1; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2);
+      color:white; font-size:2rem; font-family:'Fredoka One',cursive; ${style}
+      touch-action:none; user-select:none;
+    `;
+    b.addEventListener('touchstart', e => { e.preventDefault(); ondown(); }, {passive:false});
+    b.addEventListener('touchend', e => { e.preventDefault(); onup(); }, {passive:false});
+    return b;
+  };
+
+  div.append(
+    makeBtn('◀', () => touchLeft=true, () => touchLeft=false),
+    makeBtn('🔼', () => touchAccel=true, () => touchAccel=false),
+    makeBtn('🔽', () => touchBrake=true, () => touchBrake=false),
+    makeBtn('▶', () => touchRight=true, () => touchRight=false)
+  );
+
+  document.body.appendChild(div);
+}
+
+// ─── Game State ────────────────────────────────
+let gameRunning = false;
+let raceTime = 0;
+let lapTimes = [];
+let lapStartTime = 0;
+const TOTAL_LAPS = 3;
+
+function startCountdown(onGo) {
+  const el = document.getElementById('countdown');
+  el.style.display = 'block';
+  let count = 3;
+  el.textContent = count;
+
+  const interval = setInterval(() => {
+    count--;
+    if (count <= 0) {
+      el.textContent = 'GO! 🏁';
+      setTimeout(() => { el.style.display = 'none'; onGo(); }, 600);
+      clearInterval(interval);
+    } else {
+      el.style.animation = 'none';
+      el.offsetHeight;
+      el.animation = 'countPop 0.4s ease-out';
+      el.textContent = count;
+    }
+  }, 1000);
+}
+
+function useItem() {
+  if (!kartItem) return;
+  const item = kartItem;
+  kartItem = null;
+  document.getElementById('item-box').textContent = '❓';
+
+  if (item === '⭐' || item === '🚀') {
+    kartBoostTimer = 180;
+    flash('#ffd700');
+  } else if (item === '🛡️') {
+    kartShieldTimer = 300;
+    flash('#00cfff');
+  } else if (item === '⚡') {
+    // Zap nearby AIs
+    aiKarts.forEach(ai => ai.speed = 0.1);
+    setTimeout(() => aiKarts.forEach(ai => ai.speed = 0.4 + Math.random() * 0.15), 2000);
+    flash('#ffffff');
+  }
+}
+
+function flash(color) {
+  const el = document.getElementById('effect-flash');
+  el.style.background = color;
+  el.style.opacity = '0.4';
+  setTimeout(() => el.style.opacity = '0', 200);
+}
+
+// ─── Physics & Update ─────────────────────────
+const MAX_SPEED = 0.8;
+const ACCEL = 0.025;
+const BRAKE = 0.04;
+const FRICTION = 0.015;
+const TURN_SPEED = 0.03;
+const OFF_TRACK_SPEED = 0.4;
+
+function nearestTrackPoint(pos) {
+  if (!trackData) return { dist: 0, index: 0 };
+  let minDist = Infinity, minIdx = 0;
+  for (let i = 0; i < trackData.points.length; i++) {
+    const p = trackData.points[i];
+    const d = Math.sqrt((pos.x - p.x) ** 2 + (pos.z - p.z) ** 2);
+    if (d < minDist) { minDist = d; minIdx = i; }
+  }
+  return { dist: minDist, index: minIdx };
+}
+
+function updateKart(delta) {
+  if (!kart || !gameRunning) return;
+
+  if (kartSpinTimer > 0) {
+    kartSpinTimer--;
+    kartAngle += 0.1;
+    kartSpeed *= 0.92;
+    kart.rotation.y = kartAngle;
+    kart.position.add(kartVelocity.clone().multiplyScalar(delta * 0.3));
+    return;
+  }
+
+  const boost = kartBoostTimer > 0 ? 1.8 : 1;
+  if (kartBoostTimer > 0) kartBoostTimer--;
+
+  const accel = (keys['KeyW'] || keys['ArrowUp'] || touchAccel);
+  const decel = (keys['KeyS'] || keys['ArrowDown'] || touchBrake);
+  const left  = (keys['KeyA'] || keys['ArrowLeft'] || touchLeft);
+  const right = (keys['KeyD'] || keys['ArrowRight'] || touchRight);
+  const drift = keys['Space'];
+
+  const maxSpd = MAX_SPEED * boost * (kartOnTrack ? 1 : OFF_TRACK_SPEED);
+
+  if (accel) kartSpeed = Math.min(kartSpeed + ACCEL * boost, maxSpd);
+  else if (decel) kartSpeed = Math.max(kartSpeed - BRAKE, -MAX_SPEED * 0.4);
+  else kartSpeed *= (1 - FRICTION);
+
+  if (Math.abs(kartSpeed) > 0.01) {
+    const turnMult = drift ? 1.6 : 1.0;
+    const effectiveTurn = TURN_SPEED * (kartSpeed / MAX_SPEED) * turnMult;
+    if (left) kartAngle += effectiveTurn;
+    if (right) kartAngle -= effectiveTurn;
+  }
+
+  const dz = Math.cos(kartAngle) * kartSpeed * delta;
+  const dx = Math.sin(kartAngle) * kartSpeed * delta;
+
+  kart.position.x += dx;
+  kart.position.z += dz;
+  kart.position.y = 0.7;
+  kart.rotation.y = kartAngle;
+
+  // Lean on turns
+  if (left) kart.rotation.z = 0.08;
+  else if (right) kart.rotation.z = -0.08;
+  else kart.rotation.z *= 0.8;
+
+  kart.rotation.x = kartSpeed * -0.05;
+
+  // Rotate wheels
+  if (kart.userData.wheels) {
+    kart.userData.wheels.forEach(w => w.rotation.x += kartSpeed * 0.3);
+  }
+
+  // Track check
+  const { dist, index } = nearestTrackPoint(kart.position);
+  kartOnTrack = dist < 14;
+
+  // Checkpoint / lap detection
+  const checkIdx = lapCheckpoints.findIndex(c => {
+    const d = Math.abs(index - c);
+    return d < 10;
+  });
+
+  if (checkIdx !== -1 && checkIdx !== lastCheckpoint) {
+    if (checkIdx === 0 && lastCheckpoint === 3) {
+      // Crossed finish line
+      const lapTime = (performance.now() - lapStartTime) / 1000;
+      lapTimes.push(lapTime);
+      lapStartTime = performance.now();
+
+      if (kartLap >= TOTAL_LAPS) {
+        finishRace();
+        return;
+      }
+      kartLap++;
+      document.getElementById('lap-num').textContent = kartLap;
+    }
+    lastCheckpoint = checkIdx;
+  }
+
+  // Obstacle collision
+  obstacles.forEach(obs => {
+    if (!obs.mesh || !obs.mesh.userData.obstacle && !obs.mesh.userData.isLava) return;
+    const dx = kart.position.x - obs.mesh.position.x;
+    const dz = kart.position.z - obs.mesh.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    const radius = obs.radius || 3;
+    if (dist < radius + 1.5) {
+      if (obs.isLava) {
+        if (kartShieldTimer <= 0) {
+          kartSpinTimer = 60;
+          flash('#ff4400');
+        }
+      } else {
+        kartSpeed *= -0.4;
+        kart.position.x += dx / dist * 2;
+        kart.position.z += dz / dist * 2;
+      }
+    }
+  });
+  if (kartShieldTimer > 0) kartShieldTimer--;
+
+  // Item box collision
+  itemBoxes.forEach(box => {
+    if (!box.userData.active) return;
+    const dx = kart.position.x - box.position.x;
+    const dz = kart.position.z - box.position.z;
+    if (Math.sqrt(dx * dx + dz * dz) < 3) {
+      kartItem = box.userData.item;
+      document.getElementById('item-box').textContent = kartItem;
+      box.userData.active = false;
+      box.visible = false;
+      flash('#ffd700');
+      // Respawn after 8s
+      setTimeout(() => { box.userData.active = true; box.visible = true; }, 8000);
+    }
+  });
+}
+
+function updateAI(delta) {
+  aiKarts.forEach(ai => {
+    ai.wobble += 0.02;
+    ai.pathIndex = (ai.pathIndex + 1) % trackData.points.length;
+    const target = trackData.points[ai.pathIndex];
+    const wobbleOffset = Math.sin(ai.wobble) * 4;
+    const dirVec = new THREE.Vector3(target.x - ai.mesh.position.x, 0, target.z - ai.mesh.position.z).normalize();
+    const perp = new THREE.Vector3(-dirVec.z, 0, dirVec.x);
+
+    ai.mesh.position.x += dirVec.x * ai.speed * delta + perp.x * wobbleOffset * 0.01;
+    ai.mesh.position.z += dirVec.z * ai.speed * delta + perp.z * wobbleOffset * 0.01;
+    ai.mesh.position.y = 0.7;
+    ai.mesh.rotation.y = Math.atan2(dirVec.x, dirVec.z);
+  });
+}
+
+function updateHUD() {
+  const kmh = Math.round(Math.abs(kartSpeed) * 200);
+  document.getElementById('speed-display').textContent = kmh;
+
+  const elapsed = (performance.now() - lapStartTime) / 1000;
+  const m = Math.floor(elapsed / 60);
+  const s = (elapsed % 60).toFixed(2);
+  document.getElementById('lap-time').textContent = `${m}:${s.padStart(5, '0')}`;
+
+  const total = (performance.now() - raceStartTime) / 1000;
+  const tm = Math.floor(total / 60);
+  const ts = (total % 60).toFixed(2);
+
+  // Minimap
+  updateMinimap();
+}
+
+let raceStartTime = 0;
+
+function updateMinimap() {
+  const mc = document.getElementById('minimapCanvas');
+  const ctx = mc.getContext('2d');
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, 160, 160);
+
+  if (!trackData) return;
+  const pts = trackData.points;
+
+  // Find bounds
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  pts.forEach(p => {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+  });
+  const scale = 140 / Math.max(maxX - minX, maxZ - minZ);
+  const ox = 10 - minX * scale;
+  const oz = 10 - minZ * scale;
+
+  // Track
+  ctx.strokeStyle = trackData.def.borderColor.toString(16).padStart(6,'0').replace(/^/, '#');
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = p.x * scale + ox;
+    const z = p.z * scale + oz;
+    if (i === 0) ctx.moveTo(x, z);
+    else ctx.lineTo(x, z);
+  });
+  ctx.closePath();
+  ctx.stroke();
+
+  // AI karts
+  aiKarts.forEach((ai, i) => {
+    const colors = ['#ff6b35','#00ff88','#ff00ff','#ffd700'];
+    ctx.fillStyle = colors[i % colors.length];
+    const x = ai.mesh.position.x * scale + ox;
+    const z = ai.mesh.position.z * scale + oz;
+    ctx.beginPath();
+    ctx.arc(x, z, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Player
+  if (kart) {
+    ctx.fillStyle = '#00cfff';
+    const x = kart.position.x * scale + ox;
+    const z = kart.position.z * scale + oz;
+    ctx.beginPath();
+    ctx.arc(x, z, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function finishRace() {
+  gameRunning = false;
+  const total = (performance.now() - raceStartTime) / 1000;
+  const tm = Math.floor(total / 60);
+  const ts = (total % 60).toFixed(2);
+
+  document.getElementById('finish-time').textContent = `${tm}:${ts.padStart(5,'0')}`;
+
+  const lapList = document.getElementById('lap-times-list');
+  lapList.innerHTML = lapTimes.map((t, i) => {
+    const m = Math.floor(t / 60);
+    const s = (t % 60).toFixed(2);
+    return `<div>Varv ${i + 1}: ${m}:${s.padStart(5,'0')}</div>`;
+  }).join('');
+
+  document.getElementById('finish-screen').style.display = 'flex';
+}
+
+// ─── Camera ───────────────────────────────────
+const cameraOffset = new THREE.Vector3(0, 8, 16);
+const cameraTarget = new THREE.Vector3();
+let cameraCurrentPos = new THREE.Vector3(0, 8, 16);
+
+function updateCamera() {
+  if (!kart) return;
+  const ideal = kart.position.clone()
+    .add(new THREE.Vector3(
+      Math.sin(kartAngle) * -cameraOffset.z,
+      cameraOffset.y,
+      Math.cos(kartAngle) * -cameraOffset.z
+    ));
+
+  cameraCurrentPos.lerp(ideal, 0.08);
+  camera.position.copy(cameraCurrentPos);
+  cameraTarget.lerp(kart.position, 0.12);
+  camera.lookAt(cameraTarget);
+}
+
+// ─── Item box animation ────────────────────────
+let frameCount = 0;
+
+function animateItemBoxes() {
+  itemBoxes.forEach(box => {
+    if (box.userData.active) {
+      box.rotation.y += 0.03;
+      box.position.y = 2 + Math.sin(frameCount * 0.05) * 0.3;
+    }
+  });
+}
+
+// ─── Game Loop ────────────────────────────────
+let lastTime = 0;
+
+function gameLoop(time) {
+  requestAnimationFrame(gameLoop);
+  const delta = Math.min((time - lastTime) / 16.67, 3);
+  lastTime = time;
+  frameCount++;
+
+  if (gameRunning) {
+    updateKart(delta);
+    updateAI(delta);
+    updateCamera();
+    animateItemBoxes();
+    updateHUD();
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ─── Track selection & Game start ─────────────
+async function selectTrack(id) {
+  document.getElementById('track-select').style.display = 'none';
+
+  const loadTexts = [
+    'Bygger bana...', 'Laddar texturer...', 'Placerar hinder...',
+    'Förbereder AI-karts...', 'Startar motorn...'
+  ];
+
+  if (id === 'gps') {
+    document.getElementById('loading').style.opacity = '1';
+    document.getElementById('loading').style.display = 'flex';
+    document.getElementById('load-text').textContent = 'Hämtar GPS-position...';
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          TRACKS.gps.points = generateGPSTrack(lat, lon);
+          document.getElementById('load-text').textContent = 'Genererar din bana...';
+          setTimeout(() => launchTrack('gps', loadTexts), 500);
+        },
+        () => {
+          // Fallback if GPS denied
+          TRACKS.gps.points = generateCityTrack();
+          launchTrack('gps', loadTexts);
+        }
+      );
+    } else {
+      TRACKS.gps.points = generateCityTrack();
+      launchTrack('gps', loadTexts);
+    }
+  } else {
+    document.getElementById('loading').style.opacity = '1';
+    document.getElementById('loading').style.display = 'flex';
+    launchTrack(id, loadTexts);
+  }
+}
+
+function generateGPSTrack(lat, lon) {
+  // Convert GPS to game coords and generate interesting track
+  const seed = (lat * 1000 + lon * 1000) % 100;
+  const r = [
+    {x: 0, z: 0},
+    {x: 60 + seed, z: -30 - seed * 0.5},
+    {x: 140 + seed * 0.3, z: -20},
+    {x: 200, z: 40 + seed * 0.8},
+    {x: 220, z: 120},
+    {x: 180 + seed * 0.2, z: 190},
+    {x: 100, z: 220 + seed * 0.3},
+    {x: 20, z: 200},
+    {x: -50, z: 150 + seed * 0.4},
+    {x: -60 - seed * 0.2, z: 70},
+    {x: -20, z: 10},
+    {x: 0, z: 0}
+  ];
+  return r;
+}
+
+function launchTrack(id, loadTexts) {
+  let textIdx = 0;
+  const interval = setInterval(() => {
+    if (textIdx < loadTexts.length) {
+      document.getElementById('load-text').textContent = loadTexts[textIdx++];
+    }
+  }, 400);
+
+  setTimeout(() => {
+    clearInterval(interval);
+    const trackDef = TRACKS[id];
+    const startPt = buildTrack(trackDef);
+
+    const k = buildKart();
+    k.position.set(startPt.x, 0.7, startPt.z);
+    kartAngle = 0;
+    kartSpeed = 0;
+    kartLap = 1;
+    lastCheckpoint = 0;
+    kartItem = null;
+    lapTimes = [];
+    document.getElementById('lap-num').textContent = '1';
+    document.getElementById('item-box').textContent = '❓';
+
+    buildAIKarts(3);
+
+    document.getElementById('loading').style.opacity = '0';
+    setTimeout(() => {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('hud').style.display = 'block';
+      document.getElementById('minimap').style.display = 'block';
+      document.getElementById('controls-hint').style.display = 'block';
+      document.getElementById('item-display').style.display = 'flex';
+    }, 800);
+
+    startCountdown(() => {
+      gameRunning = true;
+      raceStartTime = performance.now();
+      lapStartTime = performance.now();
+    });
+  }, 2200);
+}
+
+function restartGame() {
+  document.getElementById('finish-screen').style.display = 'none';
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('minimap').style.display = 'none';
+  document.getElementById('controls-hint').style.display = 'none';
+  document.getElementById('item-display').style.display = 'none';
+  document.getElementById('track-select').style.display = 'block';
+  gameRunning = false;
+}
+
+// ─── Init ─────────────────────────────────────
+scene.background = new THREE.Color(0x0a0a1a);
+scene.fog = new THREE.FogExp2(0x0a0a1a, 0.003);
+
+setTimeout(() => {
+  document.getElementById('loading').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('loading').style.display = 'none';
+  }, 800);
+}, 2600);
+
+addTouchControls();
+requestAnimationFrame(gameLoop);
+
+// Stars background
+(function addStars() {
+  const geo = new THREE.BufferGeometry();
+  const verts = [];
+  for (let i = 0; i < 3000; i++) {
+    verts.push((Math.random() - 0.5) * 2000, 50 + Math.random() * 500, (Math.random() - 0.5) * 2000);
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, transparent: true, opacity: 0.6 });
+  scene.add(new THREE.Points(geo, mat));
+})();
+</script>
+</body>
+</html>
